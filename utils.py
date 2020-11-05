@@ -6,8 +6,8 @@ from torch.utils.data.dataset import Dataset
 from PIL import Image, ImageFilter, ImageEnhance
 from torchvision import transforms
 import requests
-import cStringIO
-import urlparse
+from io import StringIO
+#from urllib import urlparse
 
 
 def image_loader_url(url, tsfms):
@@ -21,7 +21,7 @@ def image_loader_url(url, tsfms):
         'Content-Type': 'application/x-www-form-urlencoded',
             }
     image = requests.get(url, timeout=3, headers=header_info).content
-    image = Image.open(cStringIO.StringIO(image)).convert('RGB')
+    image = Image.open(StringIO(image)).convert('RGB')
     image_tensor = tsfms(image)
     # fake batch dimension required to fit network's input dimensions
     return image_tensor

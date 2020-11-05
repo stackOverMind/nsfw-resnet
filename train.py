@@ -9,7 +9,7 @@ from torch import nn
 import torchvision
 from torchvision import transforms
 import torch.nn.functional as F
-
+from PIL import Image
 import utils
 
 
@@ -21,6 +21,7 @@ def train_one_epoch(model, criterion, optimizer, data_loader, epoch, val_dataloa
     epoch_data_len = len(data_loader.dataset)
 
     for i, (image, target) in enumerate(data_loader):
+        
         batch_start = time.time()
         image, target = image.cuda(), target.cuda()
         output = model(image)
@@ -69,46 +70,47 @@ def train_one_epoch(model, criterion, optimizer, data_loader, epoch, val_dataloa
     epoch_end = time.time()
     print('[Train@] Epoch: {}/{}, EpochAcc: {:.4f}, EpochLoss: {:.4f}, EpochTime: {:.4f}, lr: {}'.format(epoch,
           args.epochs, epoch_acc, epoch_loss, epoch_end-epoch_start, lr))
-    print()
-    print()
 
 
 def evaluate(model, criterion, data_loader, epoch, step):
+    model.eval()
     epoch_start = time.time()
     model.eval()
     running_loss = 0.0
     running_corrects = 0
     epoch_data_len = len(data_loader.dataset)
 
-    with torch.no_grad():
-        for i, (image, target) in enumerate(data_loader):
-            batch_start = time.time()
-            image, target = image.cuda(), target.cuda()
-            output = model(image)
-            loss = criterion(output, target)
-
-            _, preds = torch.max(output, 1)
-
-            loss_ = loss.item() * image.size(0) # this batch loss
-            correct_ = torch.sum(preds == target.data) # this batch correct number
-
-            running_loss += loss_
-            running_corrects += correct_
-
-            batch_end = time.time()
-            if i % args.print_freq == 0:
-                print('[VAL] Epoch: {}/{}/{}, Batch: {}/{}, BatchAcc: {:.4f}, BatchLoss: {:.4f}, BatchTime: {:.4f}'.format(step,
-                      epoch, args.epochs, i, epoch_data_len/args.batch_size, correct_.double()/image.size(0),
-                      loss_/image.size(0), batch_end-batch_start))
-
-        epoch_loss = running_loss / epoch_data_len
-        epoch_acc = running_corrects.double() / epoch_data_len
-        epoch_end = time.time()
-        print('[Val@] Epoch: {}/{}, EpochAcc: {:.4f}, EpochLoss: {:.4f}, EpochTime: {:.4f}'.format(epoch,
-              args.epochs, epoch_acc, epoch_loss, epoch_end-epoch_start))
-        print()
+    for i, (image, target) in enumerate(data_loader):
+        
+        batch_start = time.time()
+        image, target = image.cuda(), target.cuda()
+        output = model(image)
+        loss = criterion(output, target)
+        _, preds = torch.max(output, 1)
+        loss_ = loss.item() * image.size(0) # this batch loss
+        correct_ = torch.sum(preds == target.data) # this batch correct number
+        running_loss += loss_
+        running_corrects += correct_
+        batch_end = time.time()
+        if i % args.print_freq == 0:
+            print('[VAL] Epoch: {}/{}/{}, Batch: {}/{}, BatchAcc: {:.4f}, BatchLoss: {:.4f}, BatchTime: {:.4f}'.format(step,
+                  epoch, args.epochs, i, epoch_data_len/args.batch_size, correct_.double()/image.size(0),
+                  loss_/image.size(0), batch_end-batch_start))
+    epoch_loss = running_loss / epoch_data_len
+    epoch_acc = running_corrects.double() / epoch_data_len
+    epoch_end = time.time()
+    print('[Val@] Epoch: {}/{}, EpochAcc: {:.4f}, EpochLoss: {:.4f}, EpochTime: {:.4f}'.format(epoch,
+          args.epochs, epoch_acc, epoch_loss, epoch_end-epoch_start))
+    print()
     return epoch_acc
 
+def verify(f):
+    try:
+        img = Image.open(f)
+        img.verify()
+        return True
+    except:
+        return False
 
 def main(args):
     print("Loading data")
@@ -135,7 +137,7 @@ def main(args):
                     #transforms.Lambda(utils.randomBlur),
                     #transforms.Lambda(utils.randomGaussian),
                     transforms.ToTensor(),
-                    normalize,]))
+                    normalize,]),is_valid_file=verify)
 
     print("Loading validation data")
     dataset_test = torchvision.datasets.ImageFolder(
@@ -145,7 +147,7 @@ def main(args):
                     #transforms.CenterCrop(299),
                     #transforms.Grayscale(num_output_channels=3),
                     transforms.ToTensor(),
-                    normalize,]))
+                    normalize,]),is_valid_file=verify)
 
     print("Creating data loaders")
     data_loader = torch.utils.data.DataLoader(
@@ -190,8 +192,10 @@ def main(args):
     print("Start training")
     start_time = time.time()
     for epoch in range(args.epochs):
-        lr_scheduler.step()
+        print('epoch:',epoch)
         train_one_epoch(model, criterion, optimizer, data_loader, epoch, val_dataloader, classes)
+        lr_scheduler.step()
+
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
@@ -204,7 +208,7 @@ if __name__ == "__main__":
 
     parser.add_argument('--data-dir', default='/data/user/yangfg/corpus/kar-data', help='dataset')
     parser.add_argument('--model', default='resnet101', help='model')
-    parser.add_argument('--device', default=[0,1,2,3], help='device')
+    parser.add_argument('--device', default=[0], help='device')
     parser.add_argument('-b', '--batch-size', default=512, type=int)
     parser.add_argument('--epochs', default=90, type=int, metavar='N',
                         help='number of total epochs to run')
